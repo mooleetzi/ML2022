@@ -129,6 +129,7 @@ class BasicBlock(nn.Module):
 
         self.block = nn.Sequential(
             nn.Linear(input_dim, output_dim),
+            nn.BatchNorm1d(output_dim, affine=True),
             nn.ReLU(),
         )
 
@@ -144,7 +145,6 @@ class Classifier(nn.Module):
         self.fc = nn.Sequential(
             BasicBlock(input_dim, hidden_dim),
             *[BasicBlock(hidden_dim, hidden_dim) for _ in range(hidden_layers)],
-
             nn.Linear(hidden_dim, output_dim)
         )
 
@@ -154,19 +154,19 @@ class Classifier(nn.Module):
 
 
 # data prarameters
-concat_nframes = 1  # the number of frames to concat with, n must be odd (total 2k+1 = n frames)
+concat_nframes = 19  # the number of frames to concat with, n must be odd (total 2k+1 = n frames)
 train_ratio = 0.8  # the ratio of data used for training, the rest will be used for validation
 
 # training parameters
 seed = 512021  # random seed
-batch_size = 512  # batch size
+batch_size = 256  # batch size
 num_epoch = 5  # the number of training epoch
-learning_rate = 0.0001  # learning rate
+learning_rate = 0.01  # learning rate
 model_path = './model/model.ckpt'  # the path where the checkpoint will be saved
 
 # model parameters
 input_dim = 39 * concat_nframes  # the input dim of the model, you should not change the value
-hidden_layers = 2  # the number of hidden layers
+hidden_layers = 5  # the number of hidden layers
 hidden_dim = 512
 
 # preprocess data
@@ -208,7 +208,7 @@ same_seeds(seed)
 # create model, define a loss function, and optimizer
 model = Classifier(input_dim=input_dim, hidden_layers=hidden_layers, hidden_dim=hidden_dim).to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate,weight_decay=1e-2)
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-6)
 
 best_acc = 0.0
 for epoch in range(num_epoch):
