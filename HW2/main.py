@@ -10,6 +10,8 @@ import torch.nn.functional as F
 import gc
 import numpy as np
 
+gc.collect()
+
 
 def load_feat(path):
     feat = torch.load(path)
@@ -68,7 +70,6 @@ def preprocess_data(split, feat_dir, phone_path, concat_nframes, train_ratio=0.8
         usage_list = open(os.path.join(phone_path, 'test_split.txt')).readlines()
     else:
         raise ValueError('Invalid \'split\' argument for dataset: PhoneDataset!')
-
     usage_list = [line.strip('\n') for line in usage_list]
     print('[Dataset] - # phone classes: ' + str(class_num) + ', number of utterances for ' + split + ': ' + str(
         len(usage_list)))
@@ -124,7 +125,7 @@ class LibriDataset(Dataset):
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, dropout=False):
         super(BasicBlock, self).__init__()
 
         self.block = nn.Sequential(
@@ -132,6 +133,8 @@ class BasicBlock(nn.Module):
             nn.BatchNorm1d(output_dim, affine=True),
             nn.ReLU(),
         )
+        if dropout:
+            self.block.append(nn.Dropout())
 
     def forward(self, x):
         x = self.block(x)
@@ -143,9 +146,9 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
 
         self.fc = nn.Sequential(
-            BasicBlock(input_dim, hidden_dim),
-            *[BasicBlock(hidden_dim, hidden_dim) for _ in range(hidden_layers)],
-            nn.Linear(hidden_dim, output_dim)
+            BasicBlock(input_dim, hidden_dim, True),
+            *[BasicBlock(hidden_dim, hidden_dim, True) for _ in range(hidden_layers)],
+            nn.Linear(hidden_dim, output_dim),
         )
 
     def forward(self, x):
@@ -159,15 +162,15 @@ train_ratio = 0.8  # the ratio of data used for training, the rest will be used 
 
 # training parameters
 seed = 512021  # random seed
-batch_size = 256  # batch size
-num_epoch = 5  # the number of training epoch
+batch_size = 2048  # batch size
+num_epoch = 100  # the number of training epoch
 learning_rate = 0.01  # learning rate
-model_path = './model/model.ckpt'  # the path where the checkpoint will be saved
+model_path = './model.ckpt'  # the path where the checkpoint will be saved
 
 # model parameters
 input_dim = 39 * concat_nframes  # the input dim of the model, you should not change the value
-hidden_layers = 5  # the number of hidden layers
-hidden_dim = 512
+hidden_layers = 3  # the number of hidden layers
+hidden_dim = 1024
 
 # preprocess data
 train_X, train_y = preprocess_data(split='train', feat_dir='./libriphone/feat', phone_path='./libriphone',
@@ -209,6 +212,7 @@ same_seeds(seed)
 model = Classifier(input_dim=input_dim, hidden_layers=hidden_layers, hidden_dim=hidden_dim).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-6)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, eta_min=1e-9, T_0=20)
 
 best_acc = 0.0
 for epoch in range(num_epoch):
@@ -230,6 +234,7 @@ for epoch in range(num_epoch):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         _, train_pred = torch.max(outputs, 1)  # get the index of the class with the highest probability
         train_acc += (train_pred.detach() == labels.detach()).sum().item()
