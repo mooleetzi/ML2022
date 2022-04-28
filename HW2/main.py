@@ -134,7 +134,9 @@ class BasicBlock(nn.Module):
             nn.ReLU(),
         )
         if dropout:
-            self.block.append(nn.Dropout())
+            self.block.append(nn.Dropout(p=0.5))
+        else:
+            self.block.append(nn.Dropout(p=0.2))
 
     def forward(self, x):
         x = self.block(x)
@@ -146,7 +148,7 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
 
         self.fc = nn.Sequential(
-            BasicBlock(input_dim, hidden_dim, True),
+            BasicBlock(input_dim, hidden_dim, False),
             *[BasicBlock(hidden_dim, hidden_dim, True) for _ in range(hidden_layers)],
             nn.Linear(hidden_dim, output_dim),
         )
@@ -157,14 +159,14 @@ class Classifier(nn.Module):
 
 
 # data prarameters
-concat_nframes = 19  # the number of frames to concat with, n must be odd (total 2k+1 = n frames)
+concat_nframes = 21  # the number of frames to concat with, n must be odd (total 2k+1 = n frames)
 train_ratio = 0.8  # the ratio of data used for training, the rest will be used for validation
 
 # training parameters
 seed = 512021  # random seed
 batch_size = 2048  # batch size
 num_epoch = 100  # the number of training epoch
-learning_rate = 0.01  # learning rate
+learning_rate = 0.001  # learning rate
 model_path = './model.ckpt'  # the path where the checkpoint will be saved
 
 # model parameters
@@ -211,8 +213,8 @@ same_seeds(seed)
 # create model, define a loss function, and optimizer
 model = Classifier(input_dim=input_dim, hidden_layers=hidden_layers, hidden_dim=hidden_dim).to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-6)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, eta_min=1e-9, T_0=20)
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=20)
 
 best_acc = 0.0
 for epoch in range(num_epoch):
@@ -309,3 +311,4 @@ with open('prediction.csv', 'w') as f:
     f.write('Id,Class\n')
     for i, y in enumerate(pred):
         f.write('{},{}\n'.format(i, y))
+
