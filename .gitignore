@@ -133,3 +133,4 @@ dmypy.json
 HW1/runs/
 HW2/libriphone/
 *.ckpt
+*.csv
